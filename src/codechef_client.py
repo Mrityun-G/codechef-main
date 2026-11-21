@@ -1,207 +1,328 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-from html import unescape
+import html
+import json
+import logging
 import re
 import time
-from typing import Any
-from urllib.parse import urljoin
-
+from typing import Any, Dict, List, Optional
 import requests
-from bs4 import BeautifulSoup
+
+from src.config import config
+
+logger = logging.getLogger("CodeChefClient")
 
 
-BASE_URL = "https://www.codechef.com/"
+class CodeChefAuthError(RuntimeError):
+    """The CodeChef session cookie is missing, expired, or rejected.
+
+    This is an infrastructure problem, not a property of the problem being
+    solved, so callers must abort the run instead of blacklisting problems.
+    """
 
 
-@dataclass(frozen=True)
-class Problem:
-    code: str
-    name: str
-    rating: int
-    statement: str
-    input_format: str
-    output_format: str
-    constraints: str
-    samples: tuple[dict[str, str], ...]
+class VerdictTimeout(TimeoutError):
+    """Judging did not finish in time. The submission may still be accepted."""
+
+    def __init__(self, solution_id: str, waited: int):
+        super().__init__(f"Submission {solution_id} timed out after {waited}s")
+        self.solution_id = solution_id
 
 
-class CodeChefError(RuntimeError):
-    pass
+class SubmissionsDisabled(RuntimeError):
+    """CodeChef has temporarily disabled submissions for this one problem."""
+
+
+_AUTH_HINTS = ("login", "log in", "logged in", "sign in", "unauthori", "session expired")
 
 
 class CodeChefClient:
-    def __init__(self, session_cookie: str = "") -> None:
+    BASE_URL = "https://www.codechef.com"
+    API_LIST_PROBLEMS = f"{BASE_URL}/api/list/problems"
+    API_PROBLEM_DETAILS = f"{BASE_URL}/api/contests/PRACTICE/problems"
+    API_SUBMIT = f"{BASE_URL}/api/ide/submit"
+
+    # Language mapping for CodeChef IDE
+    LANG_MAP = {
+        "cpp": "42",        # C++ (gcc 9.2.1)
+        "c++": "42",
+        "cpp17": "42",
+        "python3": "116",   # Python 3.8
+        "py": "116",
+        "java": "10",       # Java
+    }
+
+    def __init__(self, session_cookie: str = ""):
+        raw_session = session_cookie or config.codechef_session
+        self.session_cookie = raw_session.strip().strip('"').strip("'") if raw_session else ""
         self.http = requests.Session()
-        self.http.headers.update(
-            {
-                "User-Agent": "CodeChefPracticeAssistant/1.0",
-                "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
-            }
-        )
-        if session_cookie:
-            cookie = session_cookie.strip()
-            if "=" not in cookie:
-                raise ValueError("CODECHEF_SESSION must include the cookie name and value")
-            name, value = cookie.split("=", 1)
-            if not name.startswith("SESS") or not value:
-                raise ValueError("CODECHEF_SESSION must have the form SESS...=value")
-            self.http.cookies.set(name, value, domain=".codechef.com", path="/")
+        self._setup_headers()
 
-    def _json(self, path: str, **kwargs: Any) -> dict[str, Any]:
-        response = self.http.get(urljoin(BASE_URL, path), timeout=30, **kwargs)
-        response.raise_for_status()
-        try:
-            payload = response.json()
-        except requests.exceptions.JSONDecodeError as error:
-            raise CodeChefError(f"CodeChef returned non-JSON data for {path}") from error
-        if not isinstance(payload, dict):
-            raise CodeChefError(f"CodeChef returned an unexpected response for {path}")
-        return payload
-
-    def _csrf_token(self, problem_code: str) -> str:
-        response = self.http.get(f"{BASE_URL}problems/{problem_code}", timeout=30)
-        response.raise_for_status()
-        patterns = (
-            r"window\.csrfToken\s*=\s*['\"]([^'\"]+)['\"]",
-            r"csrfToken\s*[:=]\s*['\"]([^'\"]+)['\"]",
-        )
-        for pattern in patterns:
-            match = re.search(pattern, response.text)
-            if match:
-                return unescape(match.group(1))
-        raise CodeChefError("Could not find window.csrfToken on the problem page")
-
-    def problem(self, code: str) -> Problem:
-        payload = self._json(f"api/contests/PRACTICE/problems/{code}")
-        if payload.get("status") != "success":
-            raise CodeChefError(str(payload.get("message") or f"Could not load {code}"))
-        components = payload.get("problemComponents") or {}
-        soup = BeautifulSoup(payload.get("body") or "", "html.parser")
-        samples = tuple(
-            {
-                "input": str(item.get("input") or ""),
-                "output": str(item.get("output") or ""),
-                "explanation": str(item.get("explanation") or ""),
-            }
-            for item in components.get("sampleTestCases", [])
-            if not item.get("isDeleted")
-        )
-        return Problem(
-            code=code,
-            name=str(payload.get("problem_name") or code),
-            rating=int(float(payload.get("difficulty_rating") or 0)),
-            statement=soup.get_text("\n", strip=True),
-            input_format=str(components.get("inputFormat") or ""),
-            output_format=str(components.get("outputFormat") or ""),
-            constraints=str(components.get("constraints") or ""),
-            samples=samples,
-        )
-
-    def discover(self, min_rating: int, max_rating: int, excluded: set[str]) -> list[dict[str, Any]]:
-        candidates: list[dict[str, Any]] = []
-        limit = 100
-        for page in range(100):
-            payload = self._json(
-                "api/list/problems",
-                params={"limit": limit, "page": page},
-            )
-            rows = payload.get("data") or []
-            if not isinstance(rows, list):
-                raise CodeChefError("CodeChef problem-list response has no data array")
-            for row in rows:
-                try:
-                    code = str(row["code"])
-                    rating = int(float(row.get("difficulty_rating") or 0))
-                except (KeyError, TypeError, ValueError):
-                    continue
-                if code not in excluded and min_rating <= rating <= max_rating:
-                    candidates.append(
-                        {"code": code, "name": str(row.get("name") or code), "rating": rating}
-                    )
-            if len(rows) < limit:
-                break
-        return candidates
-
-    def language_id(self, problem_code: str, preferred: str) -> str:
-        payload = self._json(f"api/ide/PRACTICE/languages/{problem_code}")
-        accepted_names = {
-            "cpp": {"CPP20", "CPP17", "C++"},
-            "python": {"PYTH 3", "PYTHON3"},
+    def _setup_headers(self):
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": self.BASE_URL,
+            "Origin": self.BASE_URL,
+            "Connection": "keep-alive",
         }
-        for language in payload.get("languages") or []:
-            qualified_name = str(language.get("short_qualified_name", "")).upper()
-            short_name = str(language.get("short_name", "")).upper()
-            if qualified_name in accepted_names[preferred] or short_name in accepted_names[preferred]:
-                return str(language["id"])
-        raise CodeChefError(f"CodeChef does not list a supported {preferred} language for {problem_code}")
+        if self.session_cookie:
+            if "=" not in self.session_cookie:
+                raise ValueError("CODECHEF_SESSION must include the full cookie name=value pair.")
+            cookie_name, cookie_value = self.session_cookie.split("=", 1)
+            if not cookie_name.startswith("SESS") or not cookie_value:
+                raise ValueError("CODECHEF_SESSION must have the form SESS...=value.")
+            headers["Cookie"] = f"{cookie_name}={cookie_value}"
 
-    def submit(self, problem_code: str, language_id: str, source: str) -> str:
-        csrf_token = self._csrf_token(problem_code)
-        response = self.http.post(
-            f"{BASE_URL}api/ide/submit",
-            data={
-                "sourceCode": source,
-                "language": language_id,
-                "problemCode": problem_code,
-                "contestCode": "PRACTICE",
-            },
-            headers={
-                "Referer": f"{BASE_URL}submit/{problem_code}",
-                "X-CSRFToken": csrf_token,
-                "X-CSRF-Token": csrf_token,
-            },
-            timeout=30,
-        )
+        self.http.headers.update(headers)
+
+    def fetch_practice_problems(
+        self,
+        page: int = 0,
+        limit: int = 25,
+        sort_by: str = "successful_submissions",
+        sort_order: str = "desc",
+    ) -> List[Dict[str, Any]]:
+        """Fetch popular / graded practice problems from CodeChef."""
+        params = {
+            "page": page,
+            "limit": limit,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        }
+        response = self.http.get(self.API_LIST_PROBLEMS, params=params, timeout=15)
         response.raise_for_status()
+        data = response.json()
+        return data.get("data", [])
+
+    def fetch_problem_details(self, problem_code: str) -> Dict[str, Any]:
+        """Fetch full description, constraints, and sample inputs for a problem."""
+        url = f"{self.API_PROBLEM_DETAILS}/{problem_code}"
+        response = self.http.get(url, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("status") != "success":
+            raise ValueError(f"Could not retrieve details for {problem_code}: {data}")
+
+        # Check if modern structured problemComponents exist
+        comps = data.get("problemComponents")
+        if comps and isinstance(comps, dict) and comps.get("statement"):
+            parts = []
+            if comps.get("statement"):
+                parts.append(f"### Problem Statement:\n{self._clean_html(comps['statement'])}")
+            if comps.get("inputFormat"):
+                parts.append(f"### Input Format:\n{self._clean_html(comps['inputFormat'])}")
+            if comps.get("outputFormat"):
+                parts.append(f"### Output Format:\n{self._clean_html(comps['outputFormat'])}")
+            if comps.get("constraints"):
+                parts.append(f"### Constraints:\n{self._clean_html(comps['constraints'])}")
+            if comps.get("sampleTestCases"):
+                parts.append("### Sample Test Cases:")
+                for stc in comps["sampleTestCases"]:
+                    inp = stc.get("input", "").strip()
+                    outp = stc.get("output", "").strip()
+                    expl = stc.get("explanation", "").strip()
+                    parts.append(f"Input:\n```\n{inp}\n```\nOutput:\n```\n{outp}\n```\nExplanation: {expl}")
+            clean_content = "\n\n".join(parts)
+        else:
+            raw_body = data.get("body", "")
+            raw_body = re.sub(
+                r"^This is an example statement in markdown\..*?email us at help@codechef\.com\.\s*",
+                "",
+                raw_body,
+                flags=re.DOTALL | re.IGNORECASE
+            )
+            clean_content = self._clean_html(raw_body)
+
+        data["cleanContent"] = clean_content
+        return data
+
+    def get_csrf_token(self, problem_code: str) -> str:
+        """Extract the dynamic window.csrfToken from CodeChef problem page."""
+        url = f"{self.BASE_URL}/problems/{problem_code}"
+        response = self.http.get(url, timeout=15)
+        response.raise_for_status()
+
+        match = re.search(r'window\.csrfToken\s*=\s*"([a-f0-9]+)"', response.text)
+        if match:
+            return match.group(1)
+        raise ValueError(f"Could not find window.csrfToken on problem page {url}")
+
+    def submit_solution(
+        self,
+        problem_code: str,
+        code: str,
+        language: str = "cpp",
+    ) -> str:
+        """Submit code to CodeChef IDE and return solution_id (upid)."""
+        if not self.session_cookie:
+            raise PermissionError("CODECHEF_SESSION is required to submit code to CodeChef.")
+
+        csrf_token = self.get_csrf_token(problem_code)
+        lang_id = self.LANG_MAP.get(language.lower(), "42")
+
+        headers = {
+            "Referer": f"{self.BASE_URL}/problems/{problem_code}",
+            "x-csrf-token": csrf_token,
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        }
+
+        payload = {
+            "sourceCode": code,
+            "language": lang_id,
+            "problemCode": problem_code,
+            "contestCode": "PRACTICE",
+        }
+
+        response = self.http.post(self.API_SUBMIT, data=payload, headers=headers, timeout=20)
+        if response.status_code in (401, 403):
+            body = response.text[:300]
+            # e.g. 403 {"status":"error","message":"Submissions on this problem are temporarily disabled"}
+            if "disabled" in body.lower() and "problem" in body.lower():
+                raise SubmissionsDisabled(f"{problem_code}: {body}")
+            raise CodeChefAuthError(
+                f"CodeChef rejected the session [HTTP {response.status_code}]: {body}"
+            )
+        if response.status_code != 200:
+            raise RuntimeError(f"Submission failed [HTTP {response.status_code}]: {response.text[:300]}")
+
         try:
-            payload = response.json()
-        except requests.exceptions.JSONDecodeError as error:
-            raise CodeChefError("CodeChef returned non-JSON data after submission") from error
-        if payload.get("status") == "error":
-            errors = payload.get("errors") or [payload.get("message") or "submission rejected"]
-            raise CodeChefError(", ".join(map(str, errors)))
-        solution_id = payload.get("solution_id") or payload.get("submission_id") or payload.get("id")
-        if not solution_id and isinstance(payload.get("data"), dict):
-            data = payload["data"]
-            solution_id = data.get("solution_id") or data.get("submission_id") or data.get("id")
+            res_data = response.json()
+        except ValueError:
+            raise RuntimeError(f"Non-JSON submit response: {response.text[:300]}")
+
+        solution_id = str(res_data.get("upid") or res_data.get("solution_id") or "")
         if not solution_id:
-            raise CodeChefError(f"Submission response did not include a solution ID: {payload}")
-        return str(solution_id)
+            if any(h in json.dumps(res_data).lower() for h in _AUTH_HINTS):
+                raise CodeChefAuthError(f"CodeChef session appears to be logged out: {res_data}")
+            raise RuntimeError(f"Unexpected submit response: {res_data}")
 
-    def verdict(self, solution_id: str) -> str:
-        payload = self._json("api/ide/submit", params={"solution_id": solution_id})
-        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-        for key in ("result_code", "verdict", "status"):
-            value = data.get(key)
-            if isinstance(value, str):
-                normalized = value.strip().lower().replace(" ", "_")
-                if normalized not in {"success", "pending", "queued", "running"}:
-                    return normalized
-        return "pending"
+        return solution_id
 
-    def wait_for_verdict(self, solution_id: str, timeout_seconds: int = 120) -> str | None:
-        deadline = time.monotonic() + timeout_seconds
-        while time.monotonic() < deadline:
-            result = self.verdict(solution_id)
-            if result != "pending":
-                return result
-            time.sleep(4)
+    def check_verdict_once(self, solution_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch the verdict for a submission once. Returns None while still judging."""
+        url = f"{self.API_SUBMIT}?solution_id={solution_id}"
+        try:
+            response = self.http.get(url, timeout=15)
+        except requests.RequestException as e:
+            logger.warning(f"Verdict request for {solution_id} failed: {e}")
+            return None
+        if response.status_code in (401, 403):
+            raise CodeChefAuthError(f"CodeChef rejected the session while polling [HTTP {response.status_code}]")
+        if response.status_code != 200:
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        result_code = str(data.get("result_code") or "").lower()
+        # When evaluation finishes, result_code is not 'wait' / 'running' / empty
+        if result_code and result_code not in ("wait", "running", "waiting", "compiling", "queued"):
+            return self.parse_verdict(data)
         return None
 
+    def poll_verdict(self, solution_id: str, max_wait_seconds: Optional[int] = None) -> Dict[str, Any]:
+        """Poll CodeChef IDE submit status until judging completes.
 
-def is_accepted(verdict: str) -> bool:
-    return verdict in {"ac", "accepted", "correct", "fully_correct"}
+        Raises VerdictTimeout if judging does not finish in time. A timeout is
+        NOT a rejection: the submission may still be accepted later.
+        """
+        wait = max_wait_seconds if max_wait_seconds is not None else config.verdict_timeout_seconds
+        start_time = time.time()
+        while True:
+            verdict = self.check_verdict_once(solution_id)
+            if verdict is not None:
+                return verdict
+            if time.time() - start_time >= wait:
+                break
+            time.sleep(2.5)
+        raise VerdictTimeout(solution_id, wait)
 
+    def fetch_profile_solved_count(self, username: str) -> Optional[int]:
+        """Best-effort read of 'Total Problems Solved' from a public profile page.
 
-def is_retryable(verdict: str) -> bool:
-    return verdict in {
-        "wrong",
-        "wrong_answer",
-        "wa",
-        "tle",
-        "time_limit_exceeded",
-        "runtime_error",
-        "compilation_error",
-        "ce",
-    }
+        Used only for a warning-level consistency check; returns None if the
+        page layout is not recognised.
+        """
+        try:
+            response = self.http.get(f"{self.BASE_URL}/users/{username}", timeout=15)
+            if response.status_code != 200:
+                return None
+            match = re.search(r"Total\s+Problems\s+Solved\s*:?\s*(?:<[^>]*>\s*)*(\d+)", response.text, re.I)
+            return int(match.group(1)) if match else None
+        except Exception as e:
+            logger.info(f"Could not read profile solved count for {username}: {e}")
+            return None
+
+    def parse_verdict(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize CodeChef judging result into a structured feedback object."""
+        result_code = str(raw_result.get("result_code", "unknown")).lower()
+        status = str(raw_result.get("status", "")).lower()
+        score = raw_result.get("score")
+        
+        # 'accepted' or 'correct' or 100 score means Accepted / AC on CodeChef
+        passed = (
+            result_code in ("correct", "accepted", "ac")
+            or status in ("correct", "accepted")
+            or score == 100
+        )
+
+        time_taken = raw_result.get("time", "N/A")
+        memory_taken = raw_result.get("memory", "N/A")
+
+        diagnostic = ""
+        if not passed:
+            if result_code == "wrong":
+                diagnostic = (
+                    f"Verdict: WRONG ANSWER (WA)\n"
+                    f"Score: {raw_result.get('score', 0)}\n"
+                    f"Message: {raw_result.get('custom__message', 'Incorrect output on testcases.')}"
+                )
+            elif result_code == "time":
+                diagnostic = (
+                    f"Verdict: TIME LIMIT EXCEEDED (TLE)\n"
+                    f"Time Taken: {time_taken}s\n"
+                    f"Action: Algorithm time complexity too high. Optimize loops / use fast I/O."
+                )
+            elif result_code == "compilation_error":
+                diagnostic = (
+                    f"Verdict: COMPILATION ERROR\n"
+                    f"Compiler Log:\n{raw_result.get('cmp_info', 'Compilation failed.')}"
+                )
+            elif result_code == "runtime":
+                diagnostic = (
+                    f"Verdict: RUNTIME ERROR (SIGSEGV / NZEC)\n"
+                    f"Signal: {raw_result.get('signal', 'Non-zero exit code')}\n"
+                    f"Memory Limit / Bounds Exception."
+                )
+            else:
+                diagnostic = f"Verdict: {result_code}\nDetails: {json.dumps(raw_result, indent=2)}"
+
+        return {
+            "passed": passed,
+            "result_code": result_code,
+            "time": time_taken,
+            "memory": memory_taken,
+            "diagnostic": diagnostic,
+            "raw": raw_result,
+        }
+
+    @staticmethod
+    def _clean_html(raw_html: str) -> str:
+        """Convert HTML problem body into clean, legible text."""
+        if not raw_html:
+            return ""
+        text = html.unescape(raw_html)
+        text = re.sub(r"<pre>(.*?)</pre>", r"\n```\n\1\n```\n", text, flags=re.DOTALL)
+        text = re.sub(r"<code>(.*?)</code>", r"`\1`", text)
+        text = re.sub(r"<strong>(.*?)</strong>", r"**\1**", text)
+        text = re.sub(r"<em>(.*?)</em>", r"*\1*", text)
+        text = re.sub(r"<li>(.*?)</li>", r"- \1\n", text)
+        text = re.sub(r"<p>", r"\n", text)
+        text = re.sub(r"<br\s*/?>", r"\n", text)
+        text = re.sub(r"<[^>]+>", "", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()

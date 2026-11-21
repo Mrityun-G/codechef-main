@@ -1,6 +1,9 @@
 {
-  "account": null,
-  "solved": {},
+  "schema_version": 2,
+  "account": "cry_hogs_87",
+  "total_solved": 0,
+  "solved_codes": [],
+  "failed_codes": [],
   "pending": [],
-  "attempts": {}
+  "history": []
 }

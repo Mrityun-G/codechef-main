@@ -1,233 +1,404 @@
-from __future__ import annotations
-
-from datetime import datetime, timezone
-import json
+import datetime
+import logging
+import os
 import random
-import re
+import sys
+import time
 from pathlib import Path
-from typing import Any
 
-from .codechef_client import CodeChefClient, Problem, is_accepted, is_retryable
-from .config import Config
-from .solver import GeminiSolver
+from src.config import config
+from src.codechef_client import CodeChefAuthError, CodeChefClient, SubmissionsDisabled, VerdictTimeout
+from src.solver import CodeChefSolver
+from src import database as dbm
+from src.local_judge import check_cpp, extract_samples
 
-
-ROOT = Path(__file__).resolve().parent.parent
-DATA_PATH = ROOT / "data" / "solved_problems.json"
-
-
-def _load_state(username: str) -> dict[str, Any]:
-    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not DATA_PATH.exists():
-        return {"account": username, "solved": {}, "pending": [], "attempts": {}}
-    state = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-    previous_account = state.get("account")
-    if previous_account and previous_account.casefold() != username.casefold():
-        archive_dir = DATA_PATH.parent / "archive"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        account_slug = re.sub(r"[^A-Za-z0-9_-]+", "_", str(previous_account))
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        archive_path = archive_dir / f"solved_problems-{account_slug}-{stamp}.json"
-        archive_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-        print(f"Archived state for previous account to {archive_path.relative_to(ROOT)}")
-        return {"account": username, "solved": {}, "pending": [], "attempts": {}}
-    state["account"] = username
-    state.setdefault("solved", {})
-    state.setdefault("pending", [])
-    state.setdefault("attempts", {})
-    return state
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("CodeChefAutoGrinder")
 
 
-def _save_state(state: dict[str, Any]) -> None:
-    temporary_path = DATA_PATH.with_suffix(".tmp")
-    temporary_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary_path.replace(DATA_PATH)
-
-
-def _solution_paths(problem_code: str, language: str, dry_run: bool) -> tuple[Path, Path]:
-    folder = ROOT / ("drafts" if dry_run else "solutions") / problem_code
-    extension = "cpp" if language == "cpp" else "py"
-    source_name = f"candidate.{extension}" if dry_run else f"solution.{extension}"
-    return folder / source_name, folder / "README.md"
-
-
-def _write_solution(
-    problem: Problem,
-    source: str,
-    model_name: str,
-    language: str,
-    dry_run: bool,
-    solution_id: str | None = None,
+def save_solution_files(
+    solutions_dir: Path,
+    problem_code: str,
+    code: str,
+    doc: str,
+    language: str
 ) -> None:
-    source_path, readme_path = _solution_paths(problem.code, language, dry_run)
-    source_path.parent.mkdir(parents=True, exist_ok=True)
-    source_path.write_text(source, encoding="utf-8")
-    status = "Draft; not submitted" if dry_run else f"Accepted as solution `{solution_id}`"
-    language_name = "C++17-compatible" if language == "cpp" else "Python 3"
-    readme_path.write_text(
-        f"# {problem.name} ({problem.code})\n\n"
-        f"- Difficulty: {problem.rating}\n"
-        f"- Language: {language_name}\n"
-        f"- Model: {model_name}\n"
-        f"- Status: {status}\n"
-        f"- Problem: https://www.codechef.com/problems/{problem.code}\n",
-        encoding="utf-8",
+    """Save code and explanation markdown inside problem folder."""
+    target_dir = solutions_dir / problem_code
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    ext = "cpp" if "cpp" in language.lower() or "c++" in language.lower() else "py"
+    code_path = target_dir / f"solution.{ext}"
+    with open(code_path, "w", encoding="utf-8") as f:
+        f.write(code)
+
+    readme_path = target_dir / "README.md"
+    with open(readme_path, "w", encoding="utf-8") as f:
+        f.write(doc)
+
+    logger.info(f"Saved problem solution files at: {target_dir}")
+
+
+def fallback_doc(details: dict, attempts: int, generated: bool = True) -> str:
+    code = details.get("problem_code", "")
+    name = details.get("problem_name", code)
+    return (
+        f"# [{name} ({code})](https://www.codechef.com/problems/{code})\n\n"
+        f"- **Difficulty Rating**: {details.get('difficulty_rating', 'Unrated')}\n"
+        f"- **Solved in**: {attempts} attempt(s)\n\n"
+        + ("_Explanation could not be generated automatically for this problem._\n" if generated
+           else "_Explanation skipped (GENERATE_EXPLANATIONS=false) to save Gemini quota._\n")
     )
 
 
-def _rating_band(config: Config, solved_count: int) -> tuple[int, int]:
-    base = min(config.max_rating, config.min_rating + (solved_count // 20) * config.rating_step)
-    return base, min(config.max_rating, base + config.rating_step - 1)
-
-
-def _refresh_pending(client: CodeChefClient, state: dict[str, Any]) -> None:
-    still_pending = []
-    for item in state.get("pending", []):
-        try:
-            verdict = client.verdict(str(item["solution_id"]))
-        except Exception as error:
-            print(f"Could not recheck {item.get('problem_code')}: {error}")
-            still_pending.append(item)
-            continue
-        if is_accepted(verdict):
-            code = str(item["problem_code"])
-            state["attempts"].setdefault(code, {})["last_verdict"] = verdict
-            state["solved"][code] = {
-                "solution_id": str(item["solution_id"]),
-                "rating": item.get("rating"),
-                "accepted_at": datetime.now(timezone.utc).isoformat(),
-            }
-            problem = Problem(
-                code=code,
-                name=str(item.get("name") or code),
-                rating=int(item.get("rating") or 0),
-                statement="",
-                input_format="",
-                output_format="",
-                constraints="",
-                samples=(),
-            )
-            _write_solution(
-                problem,
-                str(item.get("source") or ""),
-                str(item.get("model") or "unknown"),
-                str(item.get("language") or "cpp"),
-                False,
-                str(item["solution_id"]),
-            )
-            print(f"Pending submission {code} is now accepted")
-        elif is_retryable(verdict):
-            record = state["attempts"].setdefault(str(item["problem_code"]), {})
-            record["last_verdict"] = verdict
-            record["last_source"] = item.get("source", "")
-            print(f"Pending submission {item.get('problem_code')} finished with {verdict}")
-        else:
-            still_pending.append(item)
-    state["pending"] = still_pending
-
-
-def _solve_problem(
-    config: Config,
-    client: CodeChefClient,
-    solver: GeminiSolver,
-    problem: Problem,
-    state: dict[str, Any],
-) -> bool:
-    attempt_record = state["attempts"].setdefault(problem.code, {})
-    prior_source = str(attempt_record.get("last_source") or "")
-    prior_verdict = str(attempt_record.get("last_verdict") or "")
-    next_attempt = int(attempt_record.get("count", 0)) + 1
-    for attempt in range(next_attempt, config.max_attempts + 1):
-        source, model_name = solver.solve(problem, config.preferred_language, prior_source, prior_verdict)
-        if config.dry_run:
-            _write_solution(problem, source, model_name, config.preferred_language, True)
-            print(f"Drafted {problem.code} (rating {problem.rating}) with {model_name}")
-            return False
-        language_id = client.language_id(problem.code, config.preferred_language)
-        solution_id = client.submit(problem.code, language_id, source)
-        attempt_record.update({"count": attempt, "last_source": source, "last_verdict": "pending"})
-        verdict = client.wait_for_verdict(solution_id)
+def reconcile_pending(client: CodeChefClient, db: dict) -> None:
+    """Re-check submissions whose verdict was unknown when a previous run ended."""
+    for item in list(db.get("pending", [])):
+        code, sid = item.get("code"), item.get("solution_id")
+        verdict = client.check_verdict_once(sid)
         if verdict is None:
-            state.setdefault("pending", []).append(
-                {
-                    "problem_code": problem.code,
-                    "name": problem.name,
-                    "rating": problem.rating,
-                    "solution_id": solution_id,
-                    "source": source,
-                    "model": model_name,
-                    "language": config.preferred_language,
-                    "attempt": attempt,
-                }
-            )
-            print(f"{problem.code} is still pending as solution {solution_id}")
-            return False
-        print(f"{problem.code} attempt {attempt}: {verdict}")
-        attempt_record["last_verdict"] = verdict
-        if is_accepted(verdict):
-            state["solved"][problem.code] = {
-                "solution_id": solution_id,
-                "rating": problem.rating,
-                "accepted_at": datetime.now(timezone.utc).isoformat(),
-            }
-            _write_solution(
-                problem,
-                source,
-                model_name,
-                config.preferred_language,
-                False,
-                solution_id,
-            )
-            return True
-        if not is_retryable(verdict):
-            attempt_record["exhausted"] = True
-            print(f"Stopping retries for {problem.code} after non-retryable verdict {verdict}")
-            return False
-        prior_source = source
-        prior_verdict = verdict
-    attempt_record["exhausted"] = True
-    return False
+            logger.info(f"Pending submission {sid} for {code} is still being judged; will check again next run.")
+            continue
+        if verdict["passed"]:
+            logger.info(f"Pending submission {sid} for {code} was ACCEPTED. Recording it.")
+            dbm.record_accepted(db, code, item.get("name", code), sid, attempts=None)
+        else:
+            logger.info(f"Pending submission {sid} for {code} ended as {verdict['result_code']}; problem is eligible again.")
+            dbm.clear_pending(db, code)
 
 
-def run() -> None:
-    config = Config.from_env()
-    client = CodeChefClient(config.codechef_session)
-    solver = GeminiSolver(config.gemini_api_key, config.model_names)
-    state = _load_state(config.codechef_username)
-    _refresh_pending(client, state)
-    _save_state(state)
+def is_quota_error(err: Exception) -> bool:
+    text = str(err)
+    return "RESOURCE_EXHAUSTED" in text or "429" in text or "quota" in text.lower()
 
-    solved_count = len(state["solved"])
-    low_rating, high_rating = _rating_band(config, solved_count)
-    excluded = set(state["solved"])
-    excluded.update(str(item.get("problem_code")) for item in state.get("pending", []))
-    excluded.update(
-        code
-        for code, attempt in state["attempts"].items()
-        if attempt.get("exhausted") or int(attempt.get("count", 0)) >= config.max_attempts
-    )
-    candidates = client.discover(low_rating, high_rating, excluded)
-    if not candidates and high_rating < config.max_rating:
-        high_rating = min(config.max_rating, high_rating + config.rating_step)
-        candidates = client.discover(low_rating, high_rating, excluded)
-    random.shuffle(candidates)
-    print(
-        f"Account={config.codechef_username}, dry_run={config.dry_run}, "
-        f"target={config.daily_target}, rating={low_rating}-{high_rating}"
-    )
 
-    for selected in candidates[: config.daily_target]:
-        code = selected["code"]
+def emit_continue(flag: bool, reason: str) -> None:
+    """Tell the workflow whether to start another run right away (sprint chaining)."""
+    logger.info(f"Chain next run: {'yes' if flag else 'no'} ({reason})")
+    out = os.getenv("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a", encoding="utf-8") as f:
+            f.write(f"continue={'true' if flag else 'false'}\n")
+
+
+def run():
+    logger.info("=== Starting CodeChef Practice Archive Auto-Grinder ===")
+    run_started = time.monotonic()
+
+    client = CodeChefClient()
+    solver = CodeChefSolver()
+    account = config.codechef_username
+
+    # Pre-flight Credentials Verification
+    if not solver.api_key:
+        logger.error(
+            "CRITICAL: GEMINI_API_KEY is missing! Please configure it in your environment or GitHub Secrets."
+        )
+        sys.exit(1)
+
+    if not config.dry_run and not client.session_cookie:
+        logger.error(
+            "CRITICAL: CODECHEF_SESSION is missing! Please add your CodeChef session cookie to GitHub Secrets."
+        )
+        sys.exit(1)
+
+    if not account:
+        logger.error(
+            "CRITICAL: CODECHEF_USERNAME is not set. It must be the CodeChef handle that owns "
+            "CODECHEF_SESSION, so the solved database is never mixed with another account's history."
+        )
+        sys.exit(1)
+
+    # 1. Load the database for THIS account (foreign databases are archived, not reused)
+    db = dbm.load_database(config.data_file, account)
+    dbm.save_database(config.data_file, db)
+
+    if not config.dry_run:
         try:
-            problem = client.problem(code)
-            _solve_problem(config, client, solver, problem, state)
-        except Exception as error:
-            print(f"Skipping {code} after error: {error}")
-        finally:
-            _save_state(state)
+            reconcile_pending(client, db)
+        except CodeChefAuthError as e:
+            logger.error(f"CRITICAL: CodeChef session is not valid: {e}")
+            sys.exit(1)
+        dbm.save_database(config.data_file, db)
 
-    _save_state(state)
-    print(f"Accepted records tracked: {len(state['solved'])}; pending submissions: {len(state['pending'])}")
+    solved_set = set(db["solved_codes"])
+    failed_set = set(db["failed_codes"])
+    pending_set = dbm.pending_codes(db)
+
+    today_solved = dbm.count_solved_on(db["history"], account, dbm.utc_now().date())
+    logger.info(
+        f"Database loaded for '{account}': {len(solved_set)} accepted (with submission ids), "
+        f"{len(failed_set)} failed, {len(pending_set)} awaiting verdict."
+    )
+    logger.info(f"Problems solved today so far (UTC): {today_solved} (Daily Target Range: {config.daily_target_min}-{config.daily_target_max})")
+
+    profile_count = client.fetch_profile_solved_count(account)
+    if profile_count is not None:
+        logger.info(f"CodeChef profile '{account}' reports {profile_count} problems solved.")
+        if profile_count < len(solved_set):
+            logger.warning(
+                f"Local database claims {len(solved_set)} solved but the profile shows {profile_count}. "
+                "Check that CODECHEF_SESSION belongs to this account."
+            )
+
+    # Check if daily upper bound is reached
+    if today_solved >= config.daily_target_max:
+        logger.info(f"Daily quota of {today_solved} problems reached for today! Resting until tomorrow to maintain human-like activity.")
+        emit_continue(False, "daily cap reached")
+        return
+
+    # 2. Determine Random Session Target
+    if config.randomize_batch:
+        target_this_run = random.randint(config.min_problems_per_run, config.max_problems_per_run)
+        remaining_today = config.daily_target_max - today_solved
+        target_this_run = min(target_this_run, remaining_today)
+    else:
+        target_this_run = config.min_problems_per_run
+
+    logger.info(f"Targeting {target_this_run} problem(s) in this randomized session.")
+
+    # 3. Discover Unsolved Candidate Problems
+    candidate_problems = []
+    seen = set()
+    page = 0
+    while len(candidate_problems) < target_this_run and page < config.max_discovery_pages:
+        try:
+            problems = client.fetch_practice_problems(
+                page=page,
+                limit=30,
+                sort_by="successful_submissions",
+                sort_order="desc"
+            )
+        except Exception as e:
+            logger.error(f"Failed to fetch problems page {page}: {e}")
+            break
+
+        if not problems:
+            break
+
+        for p in problems:
+            code = p.get("code")
+            if not code or code in seen:
+                continue
+
+            try:
+                diff = int(p.get("difficulty_rating", -1))
+            except (TypeError, ValueError):
+                diff = -1
+            if diff > 0 and (diff < config.min_difficulty or diff > config.max_difficulty):
+                continue
+
+            # Skip already solved, failed, or awaiting a verdict
+            if code in solved_set or code in failed_set or code in pending_set:
+                continue
+
+            seen.add(code)
+            candidate_problems.append(p)
+            if len(candidate_problems) >= target_this_run:
+                break
+
+        page += 1
+
+    if not candidate_problems:
+        logger.info("No new candidate problems found in targeted range. All caught up!")
+        emit_continue(False, "no candidates left")
+        return
+
+    logger.info(f"Selected {len(candidate_problems)} problems to solve in this session:")
+    for i, p in enumerate(candidate_problems, 1):
+        logger.info(f"  {i}. {p.get('code')} - {p.get('name')} (Rating: {p.get('difficulty_rating')})")
+
+    # 4. Solve & Submit Each Problem
+    solved_this_run = 0
+    max_infra_errors = 2
+
+    stop_run = False
+
+    for idx, p_meta in enumerate(candidate_problems, 1):
+        if stop_run:
+            break
+        elapsed_min = (time.monotonic() - run_started) / 60
+        if config.max_runtime_minutes and elapsed_min >= config.max_runtime_minutes:
+            logger.info(
+                f"Run time budget of {config.max_runtime_minutes} min reached ({elapsed_min:.1f} min). "
+                "Stopping here so progress is committed; the next run continues."
+            )
+            break
+
+        code = p_meta.get("code")
+        name = p_meta.get("name")
+        logger.info(f"\n[{idx}/{len(candidate_problems)}] Processing Problem: {code} ({name})...")
+
+        try:
+            details = client.fetch_problem_details(code)
+        except Exception as e:
+            logger.error(f"Failed to fetch details for {code}: {e}")
+            continue
+
+        clean_content = details.get("cleanContent", "")
+        if "example problem statement" in clean_content.lower() or "mini guide on writing statements" in clean_content.lower():
+            logger.warning(f"Skipping dummy/tutorial template problem: {code}")
+            dbm.record_failed(db, code)
+            dbm.save_database(config.data_file, db)
+            continue
+
+        # judge_attempts counts only submissions the judge actually rejected.
+        # Infrastructure errors (Gemini outage, network, auth) never blacklist a problem.
+        judge_attempts = 0
+        infra_errors = 0
+        local_failures = 0
+        samples = extract_samples(details)
+        previous_code = ""
+        diagnostic = ""
+        outcome = "unresolved"   # accepted | rejected | pending | unresolved
+
+        while judge_attempts < config.max_retries and infra_errors < max_infra_errors:
+            attempt = judge_attempts + 1
+            logger.info(f"--- Problem {code} | Attempt {attempt} of {config.max_retries} ---")
+            try:
+                if not previous_code:
+                    logger.info("Generating initial solution using Gemini...")
+                    sol_code = solver.generate_initial_solution(details, config.language)
+                else:
+                    logger.info("Triggering Self-Healing Reflection loop...")
+                    sol_code = solver.generate_self_healing_solution(
+                        problem_details=details,
+                        previous_code=previous_code,
+                        diagnostic=diagnostic,
+                        attempt=judge_attempts,
+                        language=config.language
+                    )
+            except Exception as gen_err:
+                infra_errors += 1
+                logger.error(f"Solution generation failed for {code}: {gen_err}")
+                if is_quota_error(gen_err):
+                    logger.warning(
+                        "Gemini quota / rate limit exhausted on all models. Ending this run early; "
+                        "no problem is blacklisted and the next run will continue."
+                    )
+                    stop_run = True
+                    break
+                time.sleep(10)
+                continue
+
+            logger.info(f"Generated solution ({len(sol_code)} chars). Preview:\n{sol_code[:160]}...\n")
+
+            if config.local_test and "cpp" in config.language.lower():
+                local_diag = check_cpp(sol_code, samples)
+                if local_diag:
+                    local_failures += 1
+                    logger.warning(f"Local sample test failed ({local_failures}/{config.max_local_attempts}); not submitting.\n{local_diag[:300]}")
+                    diagnostic, previous_code = local_diag, sol_code
+                    if local_failures >= config.max_local_attempts:
+                        outcome = "local_failed"
+                        break
+                    continue
+                if samples:
+                    logger.info(f"Passed {len(samples)} sample test(s) locally.")
+
+            if config.dry_run:
+                logger.info("[DRY RUN] Skipping live submission; nothing is recorded as solved.")
+                outcome = "dry_run"
+                break
+
+            try:
+                logger.info("Submitting to CodeChef IDE...")
+                solution_id = client.submit_solution(code, sol_code, config.language)
+            except SubmissionsDisabled as e:
+                logger.warning(f"Submissions are temporarily disabled for {code}; skipping it for now (not blacklisted): {e}")
+                break
+            except CodeChefAuthError as e:
+                logger.error(f"CRITICAL: CodeChef session is not valid, aborting run without blacklisting anything: {e}")
+                dbm.save_database(config.data_file, db)
+                sys.exit(1)
+            except Exception as sub_err:
+                infra_errors += 1
+                logger.error(f"Submission request failed for {code}: {sub_err}")
+                time.sleep(10)
+                continue
+
+            logger.info(f"Submitted. Solution ID: {solution_id}. Polling verdict...")
+            try:
+                verdict = client.poll_verdict(solution_id)
+            except VerdictTimeout as e:
+                # The submission exists and may well be accepted. Do NOT resubmit;
+                # park it and re-check on the next run.
+                logger.warning(f"{e}. Recording {code} as pending; it will be re-checked next run.")
+                dbm.add_pending(db, code, name, solution_id)
+                dbm.save_database(config.data_file, db)
+                outcome = "pending"
+                break
+            except CodeChefAuthError as e:
+                logger.error(f"CRITICAL: CodeChef session became invalid while polling: {e}")
+                dbm.add_pending(db, code, name, solution_id)
+                dbm.save_database(config.data_file, db)
+                sys.exit(1)
+
+            logger.info(f"Verdict: {verdict.get('result_code')} (Passed: {verdict.get('passed')})")
+
+            if verdict["passed"]:
+                logger.info(f"[ACCEPTED] Problem {code} solved successfully! (submission {solution_id})")
+                # Persist the evidence FIRST, so a later failure cannot cause a resubmission.
+                dbm.record_accepted(db, code, name, solution_id, attempts=attempt)
+                dbm.save_database(config.data_file, db)
+                solved_this_run += 1
+                outcome = "accepted"
+
+                if config.generate_explanations:
+                    try:
+                        doc = solver.generate_explanation_doc(details, sol_code, attempts=attempt, language=config.language)
+                    except Exception as doc_err:
+                        logger.warning(f"Explanation generation failed for {code} ({doc_err}); writing a minimal README.")
+                        doc = fallback_doc(details, attempt)
+                else:
+                    doc = fallback_doc(details, attempt, generated=False)
+                save_solution_files(config.solutions_dir, code, sol_code, doc, config.language)
+                break
+
+            judge_attempts += 1
+            logger.warning(f"Verdict failed: {verdict.get('result_code')}")
+            diagnostic = verdict.get("diagnostic", "Submission failed.")
+            previous_code = sol_code
+            if judge_attempts < config.max_retries:
+                time.sleep(10)
+        else:
+            if judge_attempts >= config.max_retries:
+                outcome = "rejected"
+
+        if outcome == "local_failed":
+            logger.warning(f"Problem {code} never passed its sample tests; skipped WITHOUT submitting.")
+            dbm.record_failed(db, code)
+            dbm.save_database(config.data_file, db)
+        elif outcome == "rejected":
+            logger.warning(f"Problem {code} was rejected by the judge {judge_attempts} times. Adding to skip list.")
+            dbm.record_failed(db, code)
+            dbm.save_database(config.data_file, db)
+        elif outcome == "unresolved":
+            logger.warning(
+                f"Problem {code} could not be attempted due to infrastructure errors; "
+                "it is NOT blacklisted and will be retried in a later run."
+            )
+
+        # Human-like randomized delay between different problems
+        if outcome in ("accepted", "pending", "rejected") and idx < len(candidate_problems) and not config.dry_run and not stop_run:
+            pacing_delay = random.randint(config.min_delay_seconds, config.max_delay_seconds)
+            logger.info(f"Waiting {pacing_delay}s before starting next problem (human randomized pacing)...")
+            time.sleep(pacing_delay)
+
+    logger.info(f"\n=== Session Finished: Solved {solved_this_run}/{len(candidate_problems)} problems ===")
+    if config.dry_run:
+        emit_continue(False, "dry run")
+    elif stop_run:
+        emit_continue(False, "Gemini quota exhausted")
+    elif solved_this_run == 0:
+        emit_continue(False, "nothing solved this run")
+    else:
+        emit_continue(True, f"solved {solved_this_run} this run")
+    logger.info(f"Total problems accepted on '{account}' recorded by this bot: {db['total_solved']}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,6 @@
+# [Dominant Army (DOMINANT)](https://www.codechef.com/problems/DOMINANT)
+
+- **Difficulty Rating**: 488
+- **Solved in**: 1 attempt(s)
+
+_Explanation skipped (GENERATE_EXPLANATIONS=false) to save Gemini quota._

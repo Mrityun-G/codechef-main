@@ -1,0 +1,48 @@
+#include <bits/stdc++.h>
+using namespace std;
+
+/**
+ * Problem Analysis:
+ * The number of trailing zeros in N! is determined by the number of times 
+ * the factor 10 appears in the prime factorization of N!.
+ * Since 10 = 2 * 5, and there are always more factors of 2 than 5 in any N!,
+ * the number of trailing zeros is equal to the number of times 5 appears 
+ * as a factor in the prime factorization of N!.
+ * 
+ * According to Legendre's Formula, the exponent of a prime p in N! is:
+ * E_p(N!) = floor(N/p) + floor(N/p^2) + floor(N/p^3) + ...
+ * 
+ * For p = 5:
+ * Z(N) = floor(N/5) + floor(N/25) + floor(N/125) + ...
+ * 
+ * Time Complexity: O(T * log5(N))
+ * Given T = 100,000 and N = 10^9, log5(10^9) is approx 13.
+ * Total operations approx 1.3 * 10^6, which easily fits within the 8s time limit.
+ */
+
+void solve() {
+    long long n;
+    if (!(cin >> n)) return;
+    
+    long long count = 0;
+    // We divide n by powers of 5 (5, 25, 125, ...)
+    // Using long long to prevent overflow, though n <= 10^9 fits in int.
+    while (n >= 5) {
+        count += (n / 5);
+        n /= 5;
+    }
+    cout << count << "\n";
+}
+
+int main() {
+    // Fast I/O for competitive programming
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+    
+    int t;
+    if (!(cin >> t)) return 0;
+    while (t--) {
+        solve();
+    }
+    return 0;
+}

@@ -1,55 +1,60 @@
-from dataclasses import dataclass
 import os
+from pathlib import Path
+from pydantic import BaseModel, Field
 
 
-@dataclass(frozen=True)
-class Config:
-    gemini_api_key: str
-    codechef_session: str
-    codechef_username: str
-    model_names: tuple[str, ...]
-    dry_run: bool
-    daily_target: int
-    min_rating: int
-    max_rating: int
-    rating_step: int
-    max_attempts: int
-    preferred_language: str
+class BotConfig(BaseModel):
+    # API & Session Credentials
+    gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    gemini_model: str = Field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+    codechef_session: str = Field(default_factory=lambda: os.getenv("CODECHEF_SESSION", ""))
+    # CodeChef handle that owns CODECHEF_SESSION. The solved database is bound to
+    # this account so a forked / copied database from another user is never reused.
+    codechef_username: str = Field(default_factory=lambda: os.getenv("CODECHEF_USERNAME", "").strip())
 
-    @classmethod
-    def from_env(cls) -> "Config":
-        models = tuple(
-            item.strip()
-            for item in os.getenv("GEMINI_MODELS", "gemini-3.8-flash").split(",")
-            if item.strip()
-        )
-        config = cls(
-            gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
-            codechef_session=os.getenv("CODECHEF_SESSION", "").strip(),
-            codechef_username=os.getenv("CODECHEF_USERNAME", "").strip(),
-            model_names=models,
-            dry_run=os.getenv("DRY_RUN", "true").strip().lower() in {"1", "true", "yes"},
-            daily_target=int(os.getenv("DAILY_TARGET", "5")),
-            min_rating=int(os.getenv("MIN_RATING", "200")),
-            max_rating=int(os.getenv("MAX_RATING", "1400")),
-            rating_step=int(os.getenv("RATING_STEP", "100")),
-            max_attempts=int(os.getenv("MAX_ATTEMPTS", "3")),
-            preferred_language=os.getenv("SOLUTION_LANGUAGE", "cpp").strip().lower(),
-        )
-        if not config.gemini_api_key:
-            raise ValueError("GEMINI_API_KEY is required")
-        if not config.codechef_username:
-            raise ValueError("CODECHEF_USERNAME is required")
-        if not config.dry_run and not config.codechef_session:
-            raise ValueError("CODECHEF_SESSION is required when DRY_RUN is false")
-        if not config.model_names:
-            raise ValueError("GEMINI_MODELS must contain at least one model name")
-        if not 1 <= config.daily_target <= 8:
-            raise ValueError("DAILY_TARGET must be between 1 and 8")
-        if config.min_rating < 0 or config.max_rating < config.min_rating:
-            raise ValueError("Rating bounds are invalid")
-        if config.max_attempts < 1:
-            raise ValueError("MAX_ATTEMPTS must be at least 1")
-        if config.preferred_language not in {"cpp", "python"}:
-            raise ValueError("SOLUTION_LANGUAGE must be cpp or python")
-        return config
+    # Language Settings
+    language: str = Field(default_factory=lambda: os.getenv("LANGUAGE", "cpp"))  # "cpp" or "python3"
+    max_retries: int = Field(default_factory=lambda: int(os.getenv("MAX_RETRIES", "3")))
+    # How long to wait for a verdict before parking the submission as "pending"
+    verdict_timeout_seconds: int = Field(default_factory=lambda: int(os.getenv("VERDICT_TIMEOUT_SECONDS", "120")))
+
+    # Human-Like Randomization & Pacing
+    randomize_batch: bool = Field(default_factory=lambda: os.getenv("RANDOMIZE_BATCH", "true").lower() in ("true", "1", "yes"))
+    min_problems_per_run: int = Field(default_factory=lambda: int(os.getenv("MIN_PROBLEMS_PER_RUN", "4")))
+    max_problems_per_run: int = Field(default_factory=lambda: int(os.getenv("MAX_PROBLEMS_PER_RUN", "6")))
+    daily_target_min: int = Field(default_factory=lambda: int(os.getenv("DAILY_TARGET_MIN", "8")))
+    daily_target_max: int = Field(default_factory=lambda: int(os.getenv("DAILY_TARGET_MAX", "20")))
+
+    # Random Pacing Delay between Submissions (in seconds, e.g. 40s to 120s)
+    min_delay_seconds: int = Field(default_factory=lambda: int(os.getenv("MIN_DELAY_SECONDS", "40")))
+    max_delay_seconds: int = Field(default_factory=lambda: int(os.getenv("MAX_DELAY_SECONDS", "110")))
+
+    # Ask Gemini for a README explanation after each accepted problem. Turning this off
+    # roughly halves Gemini requests; a short README is written without calling Gemini.
+    generate_explanations: bool = Field(default_factory=lambda: os.getenv("GENERATE_EXPLANATIONS", "true").lower() in ("true", "1", "yes"))
+
+    # Stop starting new problems after this many minutes (0 = no limit). Keeps each
+    # run well inside the workflow timeout so progress is always committed.
+    max_runtime_minutes: int = Field(default_factory=lambda: int(os.getenv("MAX_RUNTIME_MINUTES", "0")))
+
+    # How many pages (x30 problems) of the practice list to scan for unsolved problems.
+    max_discovery_pages: int = Field(default_factory=lambda: int(os.getenv("MAX_DISCOVERY_PAGES", "50")))
+
+    # Test each C++ solution on the sample cases before submitting, and how many
+    # Gemini rewrites a problem gets when it fails them (then it is skipped unsubmitted).
+    local_test: bool = Field(default_factory=lambda: os.getenv("LOCAL_TEST", "true").lower() in ("true", "1", "yes"))
+    max_local_attempts: int = Field(default_factory=lambda: int(os.getenv("MAX_LOCAL_ATTEMPTS", "3")))
+
+    # Difficulty Range (Ladder Progression)
+    min_difficulty: int = Field(default_factory=lambda: int(os.getenv("MIN_DIFFICULTY", "200")))
+    max_difficulty: int = Field(default_factory=lambda: int(os.getenv("MAX_DIFFICULTY", "1400")))
+
+    # File Paths
+    data_file: Path = Field(default_factory=lambda: Path(os.getenv("DATA_FILE", "data/solved_problems.json")))
+    solutions_dir: Path = Field(default_factory=lambda: Path(os.getenv("SOLUTIONS_DIR", "solutions")))
+
+    # Dry Run Mode
+    dry_run: bool = Field(default_factory=lambda: os.getenv("DRY_RUN", "false").lower() in ("true", "1", "yes"))
+
+
+config = BotConfig()
