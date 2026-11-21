@@ -327,6 +327,18 @@ def test_submission_history_endpoint_reports_any_prior_attempt(monkeypatch):
     assert calls == [f"{c.BASE_URL}/api/problems/my-submissions/PRACTICE/START01"]
 
 
+def test_submission_history_endpoint_accepts_top_level_submissions(monkeypatch):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"status": "success", "submissions": [{"id": "123"}]}
+
+    c = CodeChefClient(session_cookie="SESS=x")
+    monkeypatch.setattr(c.http, "get", lambda *a, **k: Response())
+    assert c.has_prior_submission("START01") is True
+
+
 def test_poll_verdict_raises_verdict_timeout(monkeypatch):
     c = CodeChefClient(session_cookie="SESS=x")
     monkeypatch.setattr(c, "check_verdict_once", lambda sid: None)

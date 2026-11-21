@@ -156,8 +156,12 @@ class CodeChefClient:
                 f"CodeChef did not confirm submission history for {problem_code}."
             )
 
-        data = payload.get("data")
-        submissions = data.get("submissions") if isinstance(data, dict) else None
+        # CodeChef currently returns ``submissions`` at the top level; accept
+        # the wrapped ``data.submissions`` form as well for API variants.
+        submissions = payload.get("submissions")
+        if not isinstance(submissions, list):
+            data = payload.get("data")
+            submissions = data.get("submissions") if isinstance(data, dict) else None
         if not isinstance(submissions, list):
             raise SubmissionHistoryError(
                 f"CodeChef returned an unexpected submission history format for {problem_code}."
