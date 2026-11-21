@@ -1,9 +1,10 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 1,
+  "total_solved": 2,
   "solved_codes": [
-    "START01"
+    "START01",
+    "FLOW001"
   ],
   "failed_codes": [],
   "pending": [],
@@ -16,6 +17,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-21 19:03:23"
+    },
+    {
+      "code": "FLOW001",
+      "name": "Add Two Numbers",
+      "status": "Accepted",
+      "solution_id": "1398127372",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-21 22:28:42"
     }
   ]
 }
