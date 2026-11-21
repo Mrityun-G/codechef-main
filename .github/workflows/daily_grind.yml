@@ -1,0 +1,59 @@
+name: CodeChef Practice Auto-Grinder
+
+on:
+  schedule:
+    - cron: "0 4,16 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Generate drafts without submitting
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: codechef-practice-grinder
+  cancel-in-progress: false
+
+jobs:
+  grind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODELS: ${{ vars.GEMINI_MODELS || 'gemini-3.8-flash' }}
+      CODECHEF_SESSION: ${{ secrets.CODECHEF_SESSION }}
+      CODECHEF_USERNAME: ${{ vars.CODECHEF_USERNAME }}
+      DAILY_TARGET: "5"
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run practice assistant
+        run: python -m src.runner
+
+      - name: Commit accepted solutions and tracker
+        if: env.DRY_RUN != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/solved_problems.json solutions/
+          if git diff --cached --quiet; then
+            echo "No accepted solutions or tracker changes to commit."
+          else
+            git commit -m "chore: record accepted CodeChef practice solutions"
+            git push
+          fi
