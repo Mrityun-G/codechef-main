@@ -1,6 +1,7 @@
 """Offline regression tests (no network). Run with: python -m pytest tests/test_offline_regressions.py"""
 import datetime
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -10,10 +11,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src import database as dbm
 from src import runner
-from src.codechef_client import CodeChefAuthError, CodeChefClient, VerdictTimeout
+from src.codechef_client import (
+    CodeChefAccountMismatch,
+    CodeChefAuthError,
+    CodeChefClient,
+    SubmissionHistoryError,
+    VerdictTimeout,
+)
 from src.solver import CodeChefSolver
 
-ACCOUNT = "reyhaan_s"
+ACCOUNT = "cry_hogs_87"
 
 
 # ---------------------------------------------------------------- fakes
@@ -25,7 +32,16 @@ class FakeClient:
         self.verdicts = list(verdicts)       # per submit: dict, "timeout", "auth", or Exception
         self.pending_verdicts = pending_verdicts or {}
         self.submissions = []
+        self.prior_submissions = set()
+        self.history_checks = []
         self._next_id = 1000
+
+    def verify_authenticated_user(self, expected_username):
+        return expected_username
+
+    def has_prior_submission(self, code):
+        self.history_checks.append(code)
+        return code in self.prior_submissions
 
     def fetch_practice_problems(self, page=0, **kw):
         return self.problems if page == 0 else []
@@ -136,6 +152,48 @@ def test_same_account_database_is_reused(env):
     assert not (env.data_file.parent / "archive").exists()
 
 
+def test_prior_codechef_submission_is_skipped_and_next_candidate_is_used(env, monkeypatch):
+    client = FakeClient(
+        [{"code": "ALREADY", "name": "already"}, {"code": "NEW", "name": "new"}],
+        [AC],
+    )
+    client.prior_submissions.add("ALREADY")
+    run_with(monkeypatch, client, FakeSolver())
+    assert client.history_checks == ["ALREADY", "NEW"]
+    assert client.submissions == [("NEW", "1001")]
+    assert read_db(env)["solved_codes"] == ["NEW"]
+
+
+def test_wrong_authenticated_account_exits_before_database_is_touched(env, monkeypatch):
+    from src import runner
+
+    client = FakeClient([{"code": "A", "name": "a"}], [AC])
+    client.verify_authenticated_user = lambda expected: (_ for _ in ()).throw(
+        CodeChefAccountMismatch("configured account does not match")
+    )
+    monkeypatch.setattr(runner, "CodeChefClient", lambda: client)
+    monkeypatch.setattr(runner, "CodeChefSolver", FakeSolver)
+    with pytest.raises(SystemExit):
+        runner.run()
+    assert not env.data_file.exists()
+    assert client.submissions == []
+
+
+def test_unverifiable_submission_history_exits_before_solving(env, monkeypatch):
+    from src import runner
+
+    client = FakeClient([{"code": "A", "name": "a"}], [AC])
+    client.has_prior_submission = lambda code: (_ for _ in ()).throw(
+        SubmissionHistoryError("history unavailable")
+    )
+    monkeypatch.setattr(runner, "CodeChefClient", lambda: client)
+    monkeypatch.setattr(runner, "CodeChefSolver", FakeSolver)
+    with pytest.raises(SystemExit):
+        runner.run()
+    # Runner exits with a failure so Actions marks the run failed; no submit occurs.
+    assert client.submissions == []
+
+
 def test_accepted_requires_submission_id():
     with pytest.raises(ValueError):
         dbm.record_accepted(dbm.empty_database(ACCOUNT), "A", "a", "", 1)
@@ -234,15 +292,43 @@ def test_committed_database_is_bound_and_evidenced():
 
 # ---------------------------------------------------------------- verdicts & models
 def test_verdict_parser_variants():
-    c = CodeChefClient(session_cookie="a=b")
+    c = CodeChefClient(session_cookie="SESS=x")
     assert c.parse_verdict({"result_code": "accepted"})["passed"]
     assert c.parse_verdict({"result_code": "correct"})["passed"]
     assert not c.parse_verdict({"result_code": "wrong", "score": 0})["passed"]
     assert not c.parse_verdict({"result_code": "compilation_error"})["passed"]
 
 
+def test_authenticated_user_verification_checks_expected_handle(monkeypatch):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"status": "success", "user": {"username": "Cry_Hogs_87"}}
+
+    c = CodeChefClient(session_cookie="SESS=x")
+    monkeypatch.setattr(c.http, "get", lambda *a, **k: Response())
+    assert c.verify_authenticated_user("cry_hogs_87") == "Cry_Hogs_87"
+    with pytest.raises(CodeChefAccountMismatch):
+        c.verify_authenticated_user("another_handle")
+
+
+def test_submission_history_endpoint_reports_any_prior_attempt(monkeypatch):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"status": "success", "data": {"submissions": [{"id": "123"}]}}
+
+    c = CodeChefClient(session_cookie="SESS=x")
+    calls = []
+    monkeypatch.setattr(c.http, "get", lambda url, **k: calls.append(url) or Response())
+    assert c.has_prior_submission("START01") is True
+    assert calls == [f"{c.BASE_URL}/api/problems/my-submissions/PRACTICE/START01"]
+
+
 def test_poll_verdict_raises_verdict_timeout(monkeypatch):
-    c = CodeChefClient(session_cookie="a=b")
+    c = CodeChefClient(session_cookie="SESS=x")
     monkeypatch.setattr(c, "check_verdict_once", lambda sid: None)
     monkeypatch.setattr("src.codechef_client.time.sleep", lambda s: None)
     with pytest.raises(VerdictTimeout):
@@ -360,7 +446,7 @@ def test_submit_403_disabled_vs_auth(monkeypatch):
         def __init__(self, code, text):
             self.status_code, self.text = code, text
 
-    c = CodeChefClient(session_cookie="a=b")
+    c = CodeChefClient(session_cookie="SESS=x")
     monkeypatch.setattr(c, "get_csrf_token", lambda code: "t")
     monkeypatch.setattr(c.http, "post", lambda *a, **k: Resp(403, '{"status":"error","message":"Submissions on this problem are temporarily disabled"}'))
     with pytest.raises(SubmissionsDisabled):
@@ -378,6 +464,8 @@ WRONG_SUM = '#include <bits/stdc++.h>\nint main(){long long a,b;std::cin>>a>>b;s
 
 
 def test_local_judge_pass_wrong_compile():
+    if not shutil.which("g++"):
+        pytest.skip("g++ is required for the local C++ compiler integration check")
     samples = [("2 3", "5")]
     assert check_cpp(ECHO_SUM, samples) is None
     assert "WRONG ANSWER" in check_cpp(WRONG_SUM, samples)
@@ -398,6 +486,11 @@ def test_sample_failure_never_submits(env, monkeypatch):
             return d
 
     client = SampleClient([{"code": "A", "name": "a"}], [AC])
+    monkeypatch.setattr(
+        runner,
+        "check_cpp",
+        lambda source, samples: "Verdict: WRONG ANSWER on sample 1 (local)" if source == WRONG_SUM else None,
+    )
     run_with(monkeypatch, client, WrongSolver())
     assert client.submissions == [], "a solution failing the samples must not be submitted"
     assert read_db(env)["failed_codes"] == ["A"]

@@ -19,6 +19,14 @@ class CodeChefAuthError(RuntimeError):
     """
 
 
+class CodeChefAccountMismatch(RuntimeError):
+    """The valid CodeChef session belongs to a different configured account."""
+
+
+class SubmissionHistoryError(RuntimeError):
+    """Submission history could not be verified safely."""
+
+
 class VerdictTimeout(TimeoutError):
     """Judging did not finish in time. The submission may still be accepted."""
 
@@ -78,6 +86,83 @@ class CodeChefClient:
             headers["Cookie"] = f"{cookie_name}={cookie_value}"
 
         self.http.headers.update(headers)
+
+    def verify_authenticated_user(self, expected_username: str) -> str:
+        """Verify that CodeChef accepts the session and reports the expected handle."""
+        if not self.session_cookie:
+            raise CodeChefAuthError("CODECHEF_SESSION is missing.")
+
+        try:
+            response = self.http.get(f"{self.BASE_URL}/api/user/me", timeout=15)
+        except requests.RequestException as exc:
+            raise CodeChefAuthError("Could not verify the CodeChef session due to a network error.") from exc
+
+        if response.status_code in (401, 403):
+            raise CodeChefAuthError(f"CodeChef rejected the session [HTTP {response.status_code}].")
+        if response.status_code != 200:
+            raise CodeChefAuthError(f"Could not verify the CodeChef session [HTTP {response.status_code}].")
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise CodeChefAuthError("CodeChef returned an unreadable authentication response.") from exc
+
+        if not isinstance(payload, dict) or payload.get("status") != "success":
+            raise CodeChefAuthError("CodeChef did not confirm an authenticated session.")
+        user = payload.get("user") if isinstance(payload, dict) else None
+        actual_username = user.get("username") if isinstance(user, dict) else None
+        if not isinstance(actual_username, str) or not actual_username.strip():
+            raise CodeChefAuthError("CodeChef did not identify an authenticated user for this session.")
+
+        actual_username = actual_username.strip()
+        if actual_username.casefold() != expected_username.strip().casefold():
+            raise CodeChefAccountMismatch(
+                f"Configured account '{expected_username}' does not match the authenticated CodeChef account."
+            )
+        return actual_username
+
+    def has_prior_submission(self, problem_code: str) -> bool:
+        """Return whether this account has ever submitted this Practice problem.
+
+        Any prior attempt, regardless of verdict, is skipped to avoid accidental
+        duplicate submissions. Unexpected or unavailable responses fail closed.
+        """
+        url = f"{self.BASE_URL}/api/problems/my-submissions/PRACTICE/{problem_code}"
+        try:
+            response = self.http.get(url, timeout=15)
+        except requests.RequestException as exc:
+            raise SubmissionHistoryError(
+                f"Could not verify submission history for {problem_code} due to a network error."
+            ) from exc
+
+        if response.status_code in (401, 403):
+            raise CodeChefAuthError(
+                f"CodeChef rejected the session while checking submission history [HTTP {response.status_code}]."
+            )
+        if response.status_code != 200:
+            raise SubmissionHistoryError(
+                f"Could not verify submission history for {problem_code} [HTTP {response.status_code}]."
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise SubmissionHistoryError(
+                f"CodeChef returned unreadable submission history for {problem_code}."
+            ) from exc
+
+        if not isinstance(payload, dict) or payload.get("status") != "success":
+            raise SubmissionHistoryError(
+                f"CodeChef did not confirm submission history for {problem_code}."
+            )
+
+        data = payload.get("data")
+        submissions = data.get("submissions") if isinstance(data, dict) else None
+        if not isinstance(submissions, list):
+            raise SubmissionHistoryError(
+                f"CodeChef returned an unexpected submission history format for {problem_code}."
+            )
+        return bool(submissions)
 
     def fetch_practice_problems(
         self,
@@ -179,26 +264,26 @@ class CodeChefClient:
 
         response = self.http.post(self.API_SUBMIT, data=payload, headers=headers, timeout=20)
         if response.status_code in (401, 403):
-            body = response.text[:300]
             # e.g. 403 {"status":"error","message":"Submissions on this problem are temporarily disabled"}
-            if "disabled" in body.lower() and "problem" in body.lower():
-                raise SubmissionsDisabled(f"{problem_code}: {body}")
+            response_hint = response.text[:300].lower()
+            if "disabled" in response_hint and "problem" in response_hint:
+                raise SubmissionsDisabled(f"Submissions are temporarily disabled for {problem_code}.")
             raise CodeChefAuthError(
-                f"CodeChef rejected the session [HTTP {response.status_code}]: {body}"
+                f"CodeChef rejected the session [HTTP {response.status_code}]."
             )
         if response.status_code != 200:
-            raise RuntimeError(f"Submission failed [HTTP {response.status_code}]: {response.text[:300]}")
+            raise RuntimeError(f"Submission failed [HTTP {response.status_code}].")
 
         try:
             res_data = response.json()
         except ValueError:
-            raise RuntimeError(f"Non-JSON submit response: {response.text[:300]}")
+            raise RuntimeError("CodeChef returned a non-JSON submission response.")
 
         solution_id = str(res_data.get("upid") or res_data.get("solution_id") or "")
         if not solution_id:
             if any(h in json.dumps(res_data).lower() for h in _AUTH_HINTS):
-                raise CodeChefAuthError(f"CodeChef session appears to be logged out: {res_data}")
-            raise RuntimeError(f"Unexpected submit response: {res_data}")
+                raise CodeChefAuthError("CodeChef reports that the session is not authenticated.")
+            raise RuntimeError("CodeChef submission response did not include a solution id.")
 
         return solution_id
 

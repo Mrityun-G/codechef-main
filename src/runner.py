@@ -7,7 +7,14 @@ import time
 from pathlib import Path
 
 from src.config import config
-from src.codechef_client import CodeChefAuthError, CodeChefClient, SubmissionsDisabled, VerdictTimeout
+from src.codechef_client import (
+    CodeChefAccountMismatch,
+    CodeChefAuthError,
+    CodeChefClient,
+    SubmissionHistoryError,
+    SubmissionsDisabled,
+    VerdictTimeout,
+)
 from src.solver import CodeChefSolver
 from src import database as dbm
 from src.local_judge import check_cpp, extract_samples
@@ -113,6 +120,17 @@ def run():
         )
         sys.exit(1)
 
+    if not config.dry_run:
+        try:
+            authenticated_user = client.verify_authenticated_user(account)
+            logger.info(f"CodeChef authentication succeeded for '{authenticated_user}'.")
+        except CodeChefAccountMismatch as e:
+            logger.error(f"CRITICAL: CodeChef account check failed: {e}")
+            sys.exit(1)
+        except CodeChefAuthError as e:
+            logger.error(f"CRITICAL: CodeChef authentication failed: {e}")
+            sys.exit(1)
+
     # 1. Load the database for THIS account (foreign databases are archived, not reused)
     db = dbm.load_database(config.data_file, account)
     dbm.save_database(config.data_file, db)
@@ -195,6 +213,20 @@ def run():
             # Skip already solved, failed, or awaiting a verdict
             if code in solved_set or code in failed_set or code in pending_set:
                 continue
+
+            if not config.dry_run:
+                try:
+                    if client.has_prior_submission(code):
+                        logger.info(
+                            f"Skipping {code}: this CodeChef account already has a submission for it."
+                        )
+                        seen.add(code)
+                        continue
+                except (CodeChefAuthError, SubmissionHistoryError) as e:
+                    logger.error(
+                        f"CRITICAL: Could not verify CodeChef submission history; stopping before any new submission: {e}"
+                    )
+                    sys.exit(1)
 
             seen.add(code)
             candidate_problems.append(p)
