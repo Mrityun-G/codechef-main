@@ -1,14 +1,15 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 6,
+  "total_solved": 7,
   "solved_codes": [
     "START01",
     "FLOW001",
     "HS08TEST",
     "CCLEARN",
     "INSTNOODLE",
-    "INTEST"
+    "INTEST",
+    "GDTURN"
   ],
   "failed_codes": [],
   "pending": [],
@@ -66,6 +67,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-22 17:04:01"
+    },
+    {
+      "code": "GDTURN",
+      "name": "Good Turn",
+      "status": "Accepted",
+      "solution_id": "1398670121",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-22 20:30:27"
     }
   ]
 }
