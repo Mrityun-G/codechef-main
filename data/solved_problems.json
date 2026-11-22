@@ -1,10 +1,12 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 2,
+  "total_solved": 4,
   "solved_codes": [
     "START01",
-    "FLOW001"
+    "FLOW001",
+    "HS08TEST",
+    "CCLEARN"
   ],
   "failed_codes": [],
   "pending": [],
@@ -26,6 +28,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-21 22:28:42"
+    },
+    {
+      "code": "HS08TEST",
+      "name": "ATM",
+      "status": "Accepted",
+      "solution_id": "1398470383",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-22 12:53:39"
+    },
+    {
+      "code": "CCLEARN",
+      "name": "CodeChef Learn Problem Solving",
+      "status": "Accepted",
+      "solution_id": "1398470788",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-22 12:54:15"
     }
   ]
 }

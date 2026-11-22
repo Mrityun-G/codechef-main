@@ -5,11 +5,9 @@ using namespace std;
  * Problem Analysis:
  * The problem states that for each language, there are 2 courses.
  * If there are N languages, the total number of courses is 2 * N.
- * 
- * Constraints:
- * 1 <= N <= 100
- * Since N is small, the result will be at most 200, which fits comfortably 
- * within a standard integer type.
+ * Constraints: 1 <= N <= 100.
+ * Time Complexity: O(1) per test case.
+ * Space Complexity: O(1).
  */
 
 int main() {
@@ -17,17 +15,14 @@ int main() {
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
-    // The problem description implies a single input N per execution,
-    // but standard competitive programming practice often involves 
-    // reading until EOF or handling a single input.
-    // Given the problem constraints and format:
-    int n;
+    // The problem description implies a single integer input N.
+    // While the prompt mentions handling multiple test cases, the specific 
+    // problem description for CCLEARN only provides a single integer N.
+    // We will read N and output 2 * N.
+    
+    long long n;
     if (cin >> n) {
-        // Calculate total courses
-        long long total_courses = 2LL * n;
-        
-        // Output the result
-        cout << total_courses << "\n";
+        cout << (n * 2) << "\n";
     }
 
     return 0;
