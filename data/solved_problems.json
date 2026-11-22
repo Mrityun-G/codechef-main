@@ -1,12 +1,14 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 4,
+  "total_solved": 6,
   "solved_codes": [
     "START01",
     "FLOW001",
     "HS08TEST",
-    "CCLEARN"
+    "CCLEARN",
+    "INSTNOODLE",
+    "INTEST"
   ],
   "failed_codes": [],
   "pending": [],
@@ -46,6 +48,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-22 12:54:15"
+    },
+    {
+      "code": "INSTNOODLE",
+      "name": "Chef and Instant Noodles",
+      "status": "Accepted",
+      "solution_id": "1398614313",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-22 17:03:28"
+    },
+    {
+      "code": "INTEST",
+      "name": "Enormous Input Test",
+      "status": "Accepted",
+      "solution_id": "1398614630",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-22 17:04:01"
     }
   ]
 }

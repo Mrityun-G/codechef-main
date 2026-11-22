@@ -9,10 +9,9 @@ using namespace std;
  * Total packets = X * Y.
  * Since each customer orders 1 packet, the total number of customers served is X * Y.
  * 
- * Constraints:
- * 1 <= X, Y <= 1000
+ * Constraints: 1 <= X, Y <= 1000.
  * The maximum result is 1000 * 1000 = 1,000,000, which fits in a standard 32-bit integer.
- * Using long long is safe practice to prevent overflow in similar problems.
+ * However, using long long is good practice to prevent overflow in similar problems.
  */
 
 int main() {
@@ -21,11 +20,10 @@ int main() {
     cin.tie(NULL);
 
     long long X, Y;
-    // The problem description implies a single test case per run based on the input format.
-    // However, if the platform expects multiple test cases, the logic remains X * Y.
-    // Based on the provided input format description: "The first and only line of input contains..."
+    // The problem description implies a single test case per input based on the format,
+    // but we handle the input as specified.
     if (cin >> X >> Y) {
-        cout << (X * Y) << "\n";
+        cout << X * Y << "\n";
     }
 
     return 0;

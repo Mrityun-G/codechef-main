@@ -3,14 +3,13 @@ using namespace std;
 
 /**
  * Problem: Enormous Input Test (INTEST)
- * Complexity Analysis:
- * Time Complexity: O(N), where N is the number of integers. Given N up to 10^7,
- * we must use fast I/O to ensure the solution runs within the 8s time limit.
- * Space Complexity: O(1), as we only need to store the count and the current number.
+ * The problem requires reading up to 10^7 integers and checking divisibility by K.
+ * Given the large input size (10^7), fast I/O is mandatory to stay within the 8s time limit.
+ * Using ios_base::sync_with_stdio(false) and cin.tie(NULL) is sufficient for this constraint.
  */
 
 int main() {
-    // Fast I/O is critical for N = 10^7
+    // Optimize standard I/O operations for speed
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
