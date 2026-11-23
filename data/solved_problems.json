@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 7,
+  "total_solved": 9,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -9,7 +9,9 @@
     "CCLEARN",
     "INSTNOODLE",
     "INTEST",
-    "GDTURN"
+    "GDTURN",
+    "CBSPEED",
+    "FLOW002"
   ],
   "failed_codes": [],
   "pending": [],
@@ -76,6 +78,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-22 20:30:27"
+    },
+    {
+      "code": "CBSPEED",
+      "name": "Chef and Brain Speed",
+      "status": "Accepted",
+      "solution_id": "1399204767",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-23 21:12:24"
+    },
+    {
+      "code": "FLOW002",
+      "name": "Find Remainder",
+      "status": "Accepted",
+      "solution_id": "1399204812",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-23 21:14:18"
     }
   ]
 }

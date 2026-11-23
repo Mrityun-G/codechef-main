@@ -8,8 +8,8 @@ using namespace std;
  * 
  * Constraints:
  * 1 <= X, Y <= 100
- * Time Complexity: O(1) per test case
- * Space Complexity: O(1)
+ * Time Complexity: O(1) per test case.
+ * Space Complexity: O(1).
  */
 
 int main() {
@@ -17,16 +17,14 @@ int main() {
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
-    // The problem description does not explicitly state multiple test cases,
-    // but the instructions suggest handling them. Given the input format 
-    // "The only line of input contains two space separated integers", 
-    // we read X and Y directly.
-    
     int X, Y;
+    // Reading the two integers X and Y
     if (cin >> X >> Y) {
+        // If current speed Y is strictly greater than threshold X, print YES
         if (Y > X) {
             cout << "YES" << "\n";
         } else {
+            // Otherwise, print NO
             cout << "NO" << "\n";
         }
     }
