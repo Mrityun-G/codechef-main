@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 11,
+  "total_solved": 13,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -13,7 +13,9 @@
     "CBSPEED",
     "FLOW002",
     "FLOW006",
-    "WATERCONS"
+    "WATERCONS",
+    "MARKSTW",
+    "FLOW007"
   ],
   "failed_codes": [],
   "pending": [],
@@ -116,6 +118,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-24 01:17:25"
+    },
+    {
+      "code": "MARKSTW",
+      "name": "Alice and Marks",
+      "status": "Accepted",
+      "solution_id": "1399232486",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-24 03:30:10"
+    },
+    {
+      "code": "FLOW007",
+      "name": "Reverse The Number",
+      "status": "Accepted",
+      "solution_id": "1399232612",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-24 03:30:58"
     }
   ]
 }
