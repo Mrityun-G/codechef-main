@@ -3,10 +3,9 @@ using namespace std;
 
 /**
  * Problem: WATERCONS
- * Logic: The doctor advises at least 2000 ml.
- * We need to check if X >= 2000.
- * Time Complexity: O(T) where T is the number of test cases.
- * Space Complexity: O(1).
+ * The goal is to check if the input integer X is greater than or equal to 2000.
+ * Time Complexity: O(T), where T is the number of test cases.
+ * Space Complexity: O(1), as we only use a few variables.
  */
 
 int main() {
@@ -16,18 +15,18 @@ int main() {
 
     int t;
     if (!(cin >> t)) return 0;
-    
+
     while (t--) {
         long long x;
         cin >> x;
-        
-        // Check if Chef followed the advice
+
+        // Check if Chef drank at least 2000 ml
         if (x >= 2000) {
             cout << "YES" << "\n";
         } else {
             cout << "NO" << "\n";
         }
     }
-    
+
     return 0;
 }

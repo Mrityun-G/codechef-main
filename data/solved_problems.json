@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 9,
+  "total_solved": 11,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -11,7 +11,9 @@
     "INTEST",
     "GDTURN",
     "CBSPEED",
-    "FLOW002"
+    "FLOW002",
+    "FLOW006",
+    "WATERCONS"
   ],
   "failed_codes": [],
   "pending": [],
@@ -96,6 +98,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-23 21:14:18"
+    },
+    {
+      "code": "FLOW006",
+      "name": "Sum of Digits",
+      "status": "Accepted",
+      "solution_id": "1399212057",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-24 01:16:45"
+    },
+    {
+      "code": "WATERCONS",
+      "name": "Water Consumption",
+      "status": "Accepted",
+      "solution_id": "1399212105",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-24 01:17:25"
     }
   ]
 }

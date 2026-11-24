@@ -4,8 +4,8 @@ using namespace std;
 /**
  * Problem: Sum of Digits
  * Approach: To find the sum of digits of an integer N, we can repeatedly 
- * take the modulo of N by 10 to get the last digit, add it to a sum variable, 
- * and then perform integer division by 10 to remove the last digit.
+ * take the modulo 10 of the number to get the last digit, add it to a sum 
+ * variable, and then perform integer division by 10 to remove the last digit.
  * Time Complexity: O(T * log10(N))
  * Space Complexity: O(1)
  */
@@ -22,7 +22,7 @@ int main() {
         long long n;
         cin >> n;
 
-        // Handle negative numbers if they were to occur (though constraints say N >= 1)
+        // Handle negative numbers if they were possible (though constraints say N >= 1)
         if (n < 0) n = -n;
 
         long long sum = 0;
