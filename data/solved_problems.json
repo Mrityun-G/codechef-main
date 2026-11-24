@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 13,
+  "total_solved": 14,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -15,7 +15,8 @@
     "FLOW006",
     "WATERCONS",
     "MARKSTW",
-    "FLOW007"
+    "FLOW007",
+    "ONEFULPAIRS"
   ],
   "failed_codes": [],
   "pending": [],
@@ -136,6 +137,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-24 03:30:58"
+    },
+    {
+      "code": "ONEFULPAIRS",
+      "name": "Oneful Pairs",
+      "status": "Accepted",
+      "solution_id": "1399578703",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-24 15:28:55"
     }
   ]
 }
