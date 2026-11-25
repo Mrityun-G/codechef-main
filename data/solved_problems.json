@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 17,
+  "total_solved": 19,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -19,7 +19,9 @@
     "ONEFULPAIRS",
     "FIT",
     "BESTOFTWO",
-    "FLOW004"
+    "FLOW004",
+    "BIRYANI",
+    "TAXSAVING"
   ],
   "failed_codes": [],
   "pending": [],
@@ -176,6 +178,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-25 19:08:00"
+    },
+    {
+      "code": "BIRYANI",
+      "name": "Biryani classes",
+      "status": "Accepted",
+      "solution_id": "1400357669",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-25 22:50:37"
+    },
+    {
+      "code": "TAXSAVING",
+      "name": "Saving Taxes",
+      "status": "Accepted",
+      "solution_id": "1400357686",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-25 22:51:19"
     }
   ]
 }

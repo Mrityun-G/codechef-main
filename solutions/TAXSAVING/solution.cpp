@@ -14,12 +14,12 @@ using namespace std;
  * Constraints:
  * 1 <= T <= 100
  * 1 <= Y < X <= 100
- * Since X and Y are small, standard integers are sufficient, 
- * but using long long is good practice for competitive programming.
+ * Since the values are small, standard 'int' is sufficient, 
+ * but 'long long' is used for robustness.
  */
 
 int main() {
-    // Optimize I/O operations
+    // Fast I/O setup
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 

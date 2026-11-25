@@ -2,21 +2,21 @@
 using namespace std;
 
 /**
- * Problem Analysis:
- * The problem asks for the total cost of Biryani classes.
- * Chef attends X weeks at a cost of Y coins per week.
- * Total cost = X * Y.
+ * Problem: Biryani classes
+ * The total cost is simply the product of the number of weeks (X) 
+ * and the cost per week (Y).
  * 
  * Constraints:
  * 1 <= T <= 10^4
  * 1 <= X, Y <= 100
- * The maximum possible value is 100 * 100 = 10,000.
- * This fits comfortably within a standard 32-bit integer, 
- * but using long long is good practice for competitive programming.
+ * 
+ * Since X * Y <= 10000, the result fits comfortably within a standard 
+ * 32-bit integer, but using long long is good practice for competitive 
+ * programming to prevent overflow in similar problems.
  */
 
 int main() {
-    // Optimize standard I/O operations for speed
+    // Optimize I/O operations
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
@@ -28,7 +28,6 @@ int main() {
         if (cin >> x >> y) {
             // Calculate total cost
             long long total_cost = x * y;
-            // Output the result followed by a newline
             cout << total_cost << "\n";
         }
     }
