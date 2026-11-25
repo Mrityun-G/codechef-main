@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 14,
+  "total_solved": 16,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -16,7 +16,9 @@
     "WATERCONS",
     "MARKSTW",
     "FLOW007",
-    "ONEFULPAIRS"
+    "ONEFULPAIRS",
+    "FIT",
+    "BESTOFTWO"
   ],
   "failed_codes": [],
   "pending": [],
@@ -146,6 +148,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-24 15:28:55"
+    },
+    {
+      "code": "FIT",
+      "name": "Fitness",
+      "status": "Accepted",
+      "solution_id": "1399715440",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-25 01:39:04"
+    },
+    {
+      "code": "BESTOFTWO",
+      "name": "Best of Two",
+      "status": "Accepted",
+      "solution_id": "1399715566",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-25 01:39:39"
     }
   ]
 }
