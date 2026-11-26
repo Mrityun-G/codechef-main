@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 22,
+  "total_solved": 23,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -24,7 +24,8 @@
     "TAXSAVING",
     "PRACTICEPERF",
     "TEST",
-    "AVGPROBLEM"
+    "AVGPROBLEM",
+    "FCTRL2"
   ],
   "failed_codes": [],
   "pending": [],
@@ -226,6 +227,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-26 14:30:49"
+    },
+    {
+      "code": "FCTRL2",
+      "name": "Small factorials",
+      "status": "Accepted",
+      "solution_id": "1400919534",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-26 18:57:07"
     }
   ]
 }
