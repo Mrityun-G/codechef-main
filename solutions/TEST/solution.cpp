@@ -3,13 +3,15 @@ using namespace std;
 
 /**
  * Problem: Life, the Universe, and Everything
- * Approach: Read integers one by one from standard input. 
- * If the integer is 42, terminate the program. 
- * Otherwise, print the integer to standard output.
+ * Approach: Read integers one by one from standard input.
+ * If the integer is 42, terminate the program.
+ * Otherwise, print the integer.
+ * Time Complexity: O(N) where N is the number of inputs processed.
+ * Space Complexity: O(1) as we only store the current integer.
  */
 
 int main() {
-    // Optimize I/O operations for competitive programming
+    // Optimize I/O operations
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
