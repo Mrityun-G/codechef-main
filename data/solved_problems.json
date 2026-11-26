@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 23,
+  "total_solved": 24,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -25,7 +25,8 @@
     "PRACTICEPERF",
     "TEST",
     "AVGPROBLEM",
-    "FCTRL2"
+    "FCTRL2",
+    "AMR15A"
   ],
   "failed_codes": [],
   "pending": [],
@@ -236,6 +237,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-26 18:57:07"
+    },
+    {
+      "code": "AMR15A",
+      "name": "Mahasena",
+      "status": "Accepted",
+      "solution_id": "1400938695",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-26 22:38:42"
     }
   ]
 }
