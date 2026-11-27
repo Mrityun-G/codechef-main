@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 27,
+  "total_solved": 29,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -29,7 +29,9 @@
     "AMR15A",
     "PRACLIST",
     "DETSCORE",
-    "TOP10"
+    "TOP10",
+    "SNDMAX",
+    "CWC23QUALIF"
   ],
   "failed_codes": [],
   "pending": [],
@@ -276,6 +278,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-27 14:25:42"
+    },
+    {
+      "code": "SNDMAX",
+      "name": "Second Max of Three Numbers",
+      "status": "Accepted",
+      "solution_id": "1401480017",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-27 18:51:19"
+    },
+    {
+      "code": "CWC23QUALIF",
+      "name": "Cricket World Cup Qualifier",
+      "status": "Accepted",
+      "solution_id": "1401480499",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-27 18:52:14"
     }
   ]
 }
