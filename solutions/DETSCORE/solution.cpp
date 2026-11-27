@@ -3,8 +3,8 @@ using namespace std;
 
 /**
  * Problem Analysis:
- * The problem states that a problem is worth X points and has 10 test cases.
- * Each test case is worth the same amount of points.
+ * The problem states that a problem is worth X points and consists of 10 test cases.
+ * Each test case is worth the same number of points.
  * Therefore, the points per test case = X / 10.
  * If Chef passes N test cases, the total score = (X / 10) * N.
  * 
@@ -15,11 +15,11 @@ using namespace std;
  * X is a multiple of 10.
  * 
  * Since X is a multiple of 10, X/10 will always be an integer.
- * The maximum possible score is 200, which fits easily into a standard integer.
+ * The maximum possible score is 200, which fits comfortably in a standard integer.
  */
 
 int main() {
-    // Fast I/O for competitive programming
+    // Fast I/O setup
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
@@ -36,9 +36,8 @@ int main() {
         // Calculate total score
         long long total_score = points_per_case * n;
         
-        // Output the result
         cout << total_score << "\n";
     }
-    
+
     return 0;
 }

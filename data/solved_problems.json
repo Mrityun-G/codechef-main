@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 24,
+  "total_solved": 26,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -26,7 +26,9 @@
     "TEST",
     "AVGPROBLEM",
     "FCTRL2",
-    "AMR15A"
+    "AMR15A",
+    "PRACLIST",
+    "DETSCORE"
   ],
   "failed_codes": [],
   "pending": [],
@@ -246,6 +248,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-26 22:38:42"
+    },
+    {
+      "code": "PRACLIST",
+      "name": "How many unattempted problems",
+      "status": "Accepted",
+      "solution_id": "1400944442",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-27 01:10:45"
+    },
+    {
+      "code": "DETSCORE",
+      "name": "Determine the Score",
+      "status": "Accepted",
+      "solution_id": "1400944524",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-27 01:11:27"
     }
   ]
 }
