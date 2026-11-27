@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 26,
+  "total_solved": 27,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -28,7 +28,8 @@
     "FCTRL2",
     "AMR15A",
     "PRACLIST",
-    "DETSCORE"
+    "DETSCORE",
+    "TOP10"
   ],
   "failed_codes": [],
   "pending": [],
@@ -266,6 +267,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-27 01:11:27"
+    },
+    {
+      "code": "TOP10",
+      "name": "Masterchef finals",
+      "status": "Accepted",
+      "solution_id": "1401323471",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-27 14:25:42"
     }
   ]
 }
