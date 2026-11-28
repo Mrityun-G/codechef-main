@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 30,
+  "total_solved": 32,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -32,7 +32,9 @@
     "TOP10",
     "SNDMAX",
     "CWC23QUALIF",
-    "LUCKYSEVEN"
+    "LUCKYSEVEN",
+    "LUDO",
+    "TSORT"
   ],
   "failed_codes": [],
   "pending": [],
@@ -306,6 +308,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-28 00:43:11"
+    },
+    {
+      "code": "LUDO",
+      "name": "Chef Plays Ludo",
+      "status": "Accepted",
+      "solution_id": "1401839881",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-28 13:40:44"
+    },
+    {
+      "code": "TSORT",
+      "name": "Simple Sorting",
+      "status": "Accepted",
+      "solution_id": "1401840300",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-28 13:41:41"
     }
   ]
 }

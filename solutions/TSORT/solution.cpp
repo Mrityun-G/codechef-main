@@ -9,7 +9,9 @@ using namespace std;
  * Given the constraints (N up to 1,000,000) and the range of values (0 to 1,000,000),
  * we can use either a standard sort (O(N log N)) or Counting Sort (O(N + K)).
  * Since N and K are both 10^6, std::sort is efficient enough given the 3s time limit,
- * but using fast I/O is critical.
+ * but Counting Sort is technically optimal at O(N).
+ * 
+ * Using std::sort with fast I/O is sufficient and idiomatic for competitive programming.
  */
 
 int main() {
@@ -27,7 +29,6 @@ int main() {
     }
 
     // Sort the array in non-decreasing order
-    // std::sort uses Introsort, which has O(N log N) worst-case complexity
     sort(arr.begin(), arr.end());
 
     // Output the sorted elements
