@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 29,
+  "total_solved": 30,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -31,7 +31,8 @@
     "DETSCORE",
     "TOP10",
     "SNDMAX",
-    "CWC23QUALIF"
+    "CWC23QUALIF",
+    "LUCKYSEVEN"
   ],
   "failed_codes": [],
   "pending": [],
@@ -296,6 +297,15 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-27 18:52:14"
+    },
+    {
+      "code": "LUCKYSEVEN",
+      "name": "Lucky Seven",
+      "status": "Accepted",
+      "solution_id": "1401500009",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-28 00:43:11"
     }
   ]
 }
