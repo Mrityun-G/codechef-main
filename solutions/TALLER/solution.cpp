@@ -3,7 +3,8 @@ using namespace std;
 
 /**
  * Problem: Who is taller!
- * Logic: Compare two integers X and Y. If X > Y, Alice is taller (A). Otherwise, Bob is taller (B).
+ * Logic: Compare two integers X and Y. If X > Y, Alice is taller (A). 
+ * Otherwise, Bob is taller (B).
  * Time Complexity: O(T) where T is the number of test cases.
  * Space Complexity: O(1) as we only use a few variables.
  */
@@ -17,10 +18,10 @@ int main() {
     if (!(cin >> t)) return 0;
     
     while (t--) {
-        long long x, y;
+        int x, y;
         cin >> x >> y;
         
-        // Compare heights
+        // Compare heights and output the result
         if (x > y) {
             cout << "A" << "\n";
         } else {

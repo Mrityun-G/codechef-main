@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "account": "cry_hogs_87",
-  "total_solved": 32,
+  "total_solved": 34,
   "solved_codes": [
     "START01",
     "FLOW001",
@@ -34,7 +34,9 @@
     "CWC23QUALIF",
     "LUCKYSEVEN",
     "LUDO",
-    "TSORT"
+    "TSORT",
+    "CABS",
+    "TALLER"
   ],
   "failed_codes": [],
   "pending": [],
@@ -326,6 +328,24 @@
       "attempts": 1,
       "account": "cry_hogs_87",
       "time": "2026-11-28 13:41:41"
+    },
+    {
+      "code": "CABS",
+      "name": "The Cheaper Cab",
+      "status": "Accepted",
+      "solution_id": "1401939677",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-28 17:28:55"
+    },
+    {
+      "code": "TALLER",
+      "name": "Who is taller!",
+      "status": "Accepted",
+      "solution_id": "1401939964",
+      "attempts": 1,
+      "account": "cry_hogs_87",
+      "time": "2026-11-28 17:30:30"
     }
   ]
 }
